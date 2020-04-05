@@ -1,0 +1,82 @@
+version: 2.1
+
+parameters:
+  docker_working_directory:
+    type: string
+    default: /opt/invoke-src
+
+commands:
+  attach_made_workspace:
+    description: Attach workspace generated files from another job
+    steps:
+      - attach_workspace:
+          at: << pipeline.parameters.docker_working_directory >>/../
+
+executors:
+  default_rust_compiler:
+    docker:
+      - image: rust:1.42.0-stretch
+    working_directory: << pipeline.parameters.docker_working_directory >>
+    environment:
+      CARGO_HOME: << pipeline.parameters.docker_working_directory >>/.cargo
+
+jobs:
+  cargo_init:
+    executor: default_rust_compiler
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - cargo-cache-v1-{{ checksum "Cargo.lock" }}
+            - cargo-cache-v1-
+      - run:
+          name: Building
+          command: cargo build --all-targets --all-features
+      - save_cache:
+          paths:
+            - /usr/local/cargo/registry
+            - target/debug/.fingerprint
+            - target/debug/build
+            - target/debug/deps
+            - .cargo
+          key: cargo-cache-v1-{{ checksum "Cargo.lock" }}
+      - persist_to_workspace:
+          root: << pipeline.parameters.docker_working_directory >>/../
+          paths:
+            - invoke-src
+
+  format:
+    executor: default_rust_compiler
+    steps:
+      - attach_made_workspace
+      - run:
+          name: Getting rustfmt
+          command: rustup component add rustfmt
+      - run:
+          name: Checking formating
+          command: cargo fmt --all -- --check
+
+  lint:
+    executor: default_rust_compiler
+    steps:
+      - attach_made_workspace
+      - run:
+          name: Getting clippy
+          command: rustup component add clippy
+      - run:
+          name: Linting
+          command: cargo clippy --all-targets --all-features -- -D warnings
+
+workflows:
+  version: 2
+  "Build, Lint, Format":
+    jobs:
+      - cargo_init
+
+      - lint:
+          requires:
+            - cargo_init
+
+      - format:
+          requires:
+            - cargo_init
