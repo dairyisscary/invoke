@@ -20,6 +20,13 @@ executors:
     environment:
       CARGO_HOME: << pipeline.parameters.docker_working_directory >>/.cargo
 
+  rust_with_docker:
+    docker:
+      - image: dairyisscary/rust-with-docker:1.42.0
+    working_directory: << pipeline.parameters.docker_working_directory >>
+    environment:
+      CARGO_HOME: << pipeline.parameters.docker_working_directory >>/.cargo
+
 jobs:
   cargo_init:
     executor: default_rust_compiler
@@ -67,6 +74,18 @@ jobs:
           name: Linting
           command: cargo clippy --all-targets --all-features -- -D warnings
 
+  test:
+    executor: rust_with_docker
+    steps:
+      - attach_made_workspace
+      - setup_remote_docker
+      - run:
+          name: Pulling Test Image
+          command: docker pull alpine:3.11
+      - run:
+          name: Testing
+          command: cargo test -- --test-threads=4
+
 workflows:
   version: 2
   "Build, Lint, Format":
@@ -78,5 +97,9 @@ workflows:
             - cargo_init
 
       - format:
+          requires:
+            - cargo_init
+
+      - test:
           requires:
             - cargo_init

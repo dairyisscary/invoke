@@ -23,8 +23,11 @@ impl DockerRunCommand {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .arg("run")
-            .arg("--rm")
-            .arg("-it");
+            .arg("--rm");
+        // In tests we want to be able to turn off interactive
+        if cfg!(not(debug_assertions)) || std::env::var_os("INVOKE_TEST").is_none() {
+            command.arg("-it");
+        }
         DockerRunCommand { command }
     }
 
